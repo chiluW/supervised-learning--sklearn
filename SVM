@@ -1,0 +1,162 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn import svm
+from sklearn.model_selection import train_test_split
+
+#load data
+df = pd.read_csv('C:/Users/Chilu/Desktop/DISSdata/supervised/SVM.csv') #one-hot encode categorical variables 
+
+#data scale
+df_mm = df.max()-df.min()
+df_scale = pd.DataFrame([])
+for i in range(len(df.columns)):
+    new_columns = (df.iloc[:,i]-df.iloc[:,i].min())/df_mm[i]
+    df_scale = pd.concat([df_scale,pd.DataFrame(new_columns)],axis=1)
+    
+#split data 70-30
+X_train,X_test,y_train,y_test=train_test_split(X,y,test_size=0.3,random_state=100)
+
+#SVM different kernel
+clf_linear = svm.SVC(kernel='linear',C=4)
+clf_linear.fit(X_train,y_train)
+
+#SVN predict
+y_pred = clf_linear.predict(X_test)
+
+#cross validation 
+from sklearn.model_selection import cross_val_score
+result = cross_val_score(clf_linear, X, y, cv=10)
+print('10-fold accuracy:',result.mean())
+
+#AUC
+from sklearn import metrics
+test_auc = metrics.roc_auc_score(y_test,y_pred)#验证集上的auc值
+print('test auc',test_auc)
+
+#ROC
+from sklearn.metrics import roc_curve, auc
+fpr,tpr,threshold = roc_curve(y_test, y_pred) ###计算真正率和假正率
+roc_auc = auc(fpr,tpr)
+
+plt.figure()
+lw = 2
+plt.figure(figsize=(10,10))
+plt.plot(fpr, tpr, color='darkorange',
+         lw=lw, label='ROC curve (area = %0.4f)' % roc_auc) ###假正率为横坐标，真正率为纵坐标做曲线
+plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Support Vector Machine')
+plt.legend(loc="lower right")
+plt.show()
+
+#confusion matrix
+import matplotlib.pyplot as plt
+import numpy as np
+from sklearn.metrics import confusion_matrix
+#clf_linear = svm.SVC(kernel='linear',C=4).fit(X,y)
+def cm_plot(y, yp):
+    cm = confusion_matrix(y, yp)
+    plt.matshow(cm, cmap=plt.cm.Blues)
+    plt.colorbar()
+        
+    for x in range(len(cm)): 
+        for y in range(len(cm)):
+            plt.annotate(cm[x,y], xy=(x, y), horizontalalignment='center', verticalalignment='center')
+            
+    plt.ylabel('True label') 
+    plt.xlabel('Predicted label') 
+    return plt
+
+cm_plot(y_test,y_pred).show()
+
+from sklearn.metrics import accuracy_score
+accuracy_score(y_test, y_pred, normalize=True)
+
+# tune kearnrls
+#linear
+clf_linear = svm.SVC(kernel='linear')
+clf_linear.fit(X_train, y_train)
+#SVN predict
+train = clf_linear.predict(X_train)
+test = clf_linear.predict(X_test)
+#AUC
+train_auc = metrics.roc_auc_score(y_train,train)#test上的auc值
+print('train auc',train_auc)
+test_auc = metrics.roc_auc_score(y_test,test)#train上的auc值
+print('test auc',test_auc)
+
+#rbf
+clf_rbf = svm.SVC(kernel='rbf')
+clf_rbf.fit(X_train, y_train)
+#SVN predict
+train1 = clf_rbf.predict(X_train)
+test1 = clf_rbf.predict(X_test)
+#AUC
+train_auc1 = metrics.roc_auc_score(y_train,train1)#test上的auc值
+print('train auc',train_auc1)
+test_auc1 = metrics.roc_auc_score(y_test,test1)#train上的auc值
+print('test auc',test_auc1)
+
+#sigmoid
+clf_sigmoid = svm.SVC(kernel='sigmoid')
+clf_sigmoid.fit(X_train, y_train)
+#SVN predict
+train2 = clf_sigmoid.predict(X_train)
+test2 = clf_sigmoid.predict(X_test)
+#AUC
+train_auc2 = metrics.roc_auc_score(y_train,train2)#test上的auc值
+print('train auc',train_auc2)
+test_auc2 = metrics.roc_auc_score(y_test,test2)#train上的auc值
+print('test auc',test_auc2)
+
+#柱状图 比较 kernel？ 
+import matplotlib.pyplot as plt
+import numpy as np
+import sys
+#reload(sys)
+#sys.setdefaultencoding('utf-8')
+
+def autolabel(rects):
+    for rect in rects:
+        height = rect.get_height()
+        plt.text(rect.get_x() + rect.get_width() / 2. - 0.2, 1.03 * height, '%s' % float(height))
+
+
+if __name__ == '__main__':
+    l1=[0.8560, 0.6080, 0.5496]
+    l2=[0.8382, 0.6025, 0.5586]
+    name=['Linear','RBF','Sigmoid']
+    total_width = 0.8
+    n = 2
+    width = total_width / n
+    x=[0,1,2,]
+    a=plt.bar(x, l1, width=width, label='train AUC',fc = 'coral')
+    for i in range(len(x)):
+             x[i] = x[i] + width
+    b=plt.bar(x, l2, width=width, label='test ACU',tick_label = name,fc = 'lightblue')
+    autolabel(a)
+    autolabel(b)
+    plt.xlabel('kernels')
+    plt.ylabel('AUC score')
+    plt.legend()
+    plt.show()
+    
+    #SVN predict
+
+#tune C
+dt =svm.SVC(kernel='linear',C=6)
+dt.fit(X_train, y_train)
+train0 = dt.predict(X_train)
+test0 =dt.predict(X_test)
+#AUC
+train_auc0 = metrics.roc_auc_score(y_train,train0)#test上的auc值
+print('train auc',train_auc0)
+test_auc0 = metrics.roc_auc_score(y_test,test0)#train上的auc值
+print('test auc',test_auc0)
+
+
+
