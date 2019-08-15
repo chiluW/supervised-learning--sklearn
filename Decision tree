@@ -1,0 +1,270 @@
+#import packages
+import pandas as pd
+import numpy as np
+from pandas import DataFrame
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier as DTC
+from sklearn import tree
+from sklearn.model_selection import cross_val_score
+from sklearn import metrics
+from sklearn.metrics import roc_curve, auc
+from sklearn.metrics import roc_curve #导入ROC曲线函数
+import matplotlib.pyplot as plt
+import os
+import graphviz
+from sklearn import tree
+from sklearn.feature_extraction import DictVectorizer
+os.environ["PATH"] += os.pathsep + 'C:/Program Files (x86)/Graphviz2.38/bin/' # change this to your path of Graphviz 
+## sometimes Graphviz cannot be found by python
+
+#load excel data
+data1 = pd.read_csv('C:/Users/Chilu/Desktop/DISSdata/supervised/manual.csv')
+
+#since the dataset has too many categorical data, 编码很重要，为什么不one-hot encoding ? - 产生太多dummies，并且不是很有必要 
+#不做这一步就容易在后续build DT 遇到error :cannot convrt string into float 
+#sklearn 不支持string
+#R的C4.5处理不了超大字符串，C5.0 有bug
+col=['IncType','IncType2','IncType3','PropertyTypeLevel1','CallOrigin','MobiliseIncidentType','PropertyCategorySummary','ServiceDeliveryArea','Pumps','Fatalities','SeriousInjuries','SlightInjuries','FirstAidInjury','PrecautionaryCheck','RescueOnly','rainfallRegion','Label']
+data1=DataFrame(data1,columns=col)
+data1['IncType']=pd.Categorical(data1['IncType']).codes
+data1['IncType2']=pd.Categorical(data1['IncType2']).codes
+data1['IncType3']=pd.Categorical(data1['IncType3']).codes
+data1['PropertyTypeLevel1']=pd.Categorical(data1['PropertyTypeLevel1']).codes
+data1['CallOrigin']=pd.Categorical(data1['CallOrigin']).codes
+data1['MobiliseIncidentType']=pd.Categorical(data1['MobiliseIncidentType']).codes
+data1['PropertyCategorySummary']=pd.Categorical(data1['PropertyCategorySummary']).codes
+data1['ServiceDeliveryArea']=pd.Categorical(data1['ServiceDeliveryArea']).codes
+data1['Label']=pd.Categorical(data1['Label']).codes
+#data1=DataFrame(data1,dtype=np.int64)
+X=data1.iloc[:,0:16].values
+y=data1.iloc[:,16].values
+
+#split data into training set and test set 70-30
+X_train,X_test,y_train,y_test=train_test_split(X,y,test_size=0.3,random_state=100)
+
+#build DT
+dtc = DTC(criterion='gini',max_depth=4,min_samples_split=10)#class_weight='balanced',
+dtc.fit(X_train, y_train)
+
+y_score=dtc.predict(X_test)
+
+#check 10-fold cross validation accuracy 
+result = cross_val_score(dtc, X, y, cv=10)
+print('10-fold accuracy:',result.mean())
+
+#check AUC of training set and test set 
+test_auc = metrics.roc_auc_score(y_test,y_score)
+print('test auc',test_auc)
+
+train_auc = metrics.roc_auc_score(y_train,dtc.predict(X_train))
+
+#compute true positive rate and false positive rate - ROC
+fpr,tpr,threshold = roc_curve(y_test, y_score) 
+roc_auc = auc(fpr,tpr)
+print('train auc',train_auc)
+
+#plot ROC curve
+plt.figure()
+lw = 2
+plt.figure(figsize=(10,10))
+plt.plot(fpr, tpr, color='darkorange',
+         lw=lw, label='ROC curve (area = %0.4f)' % roc_auc) ###fpr x-axis ，tpr y-axis 
+plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Decision Tree')
+plt.legend(loc="lower right")
+plt.show()
+
+#the following process is for decision tree visualisation 
+#change attribute name back
+vec = DictVectorizer()
+data_vectorized = vec.fit_transform(list(data1.T.to_dict(orient='dict').values()))
+vec.get_feature_names() #Shows feature names
+
+Label = data1['Label']
+clf = tree.DecisionTreeClassifier()
+clf = clf.fit(data_vectorized, Label)
+
+data1.columns.tolist()[:-1]  #delete repsonse 
+
+model = DTC(criterion='gini',max_depth=4,min_samples_split=10)
+model.fit(X_train,y_train)
+dot_data=tree.export_graphviz(model,out_file=None,filled=True,rounded=True,special_characters=True,feature_names=data1.columns.tolist()[:-1])
+graph=graphviz.Source(dot_data)
+graph
+graph.render('DTnew.gv', directory='C:/Users/Chilu/Desktop', view=True)
+print('Save DTnew.gv file!\n')
+
+#confusion matrix
+import matplotlib.pyplot as plt
+import numpy as np
+from sklearn.metrics import confusion_matrix
+
+def cm_plot(y, yp):
+    cm = confusion_matrix(y, yp)
+    plt.matshow(cm, cmap=plt.cm.Blues)
+    plt.colorbar()
+        
+    for x in range(len(cm)): 
+        for y in range(len(cm)):
+            plt.annotate(cm[x,y], xy=(x, y), horizontalalignment='center', verticalalignment='center')
+            
+    plt.ylabel('True label') 
+    plt.xlabel('Predicted label') 
+    return plt
+
+cm_plot(y_test,y_score).show()
+
+#feature importance 
+fig, ax= plt.subplots(figsize=(10,8))
+from itertools import product
+import numpy as np
+import matplotlib.pyplot as plt
+from IPython.display import Image
+
+y_importances = dtc.feature_importances_
+x_importances = data1.columns.tolist()[:-1]
+y_pos = np.arange(len(x_importances))
+
+
+plt.barh(y_pos, y_importances, align='center')
+plt.yticks(y_pos, x_importances)
+plt.xlabel('Importances')
+plt.xlim(0,1)
+plt.title('Features Importances')
+plt.show()
+
+#tuning parameters
+#tree depth 
+# select best max_depth
+max_depths = np.linspace(1,32,32, endpoint=True)
+train_results = []
+test_results = []
+
+for max_depth in max_depths:
+    dt =DTC(max_depth=max_depth)
+    dt.fit(X_train, y_train)
+    train_pred = dt.predict(X_train)
+    false_positive_rate, true_positive_rate, thresholds = roc_curve(y_train, train_pred)
+    roc_auc = auc(false_positive_rate, true_positive_rate)
+    # Add auc score to previous train results
+    train_results.append(roc_auc)
+    y_pred = dt.predict(X_test)
+    false_positive_rate, true_positive_rate, thresholds = roc_curve(y_test, y_pred)
+    roc_auc = auc(false_positive_rate, true_positive_rate)
+    # Add auc score to previous test results
+    test_results.append(roc_auc)
+from matplotlib.legend_handler import HandlerLine2D
+line1, = plt.plot(max_depths, train_results, 'b', label='Train AUC')
+line2, = plt.plot(max_depths, test_results, 'r', label='Test AUC')
+plt.legend(handler_map={line1: HandlerLine2D(numpoints=2)})
+plt.ylabel('AUC score')
+plt.xlabel('Tree depth')
+plt.show()
+
+#min samples split 
+min_samples_split_values = [2,5,10,15,20,30,40,50]
+train_results = []
+test_results = []
+for min_samples_split in min_samples_split_values:
+    dt = DTC(min_samples_split=min_samples_split,max_depth=4)
+    dt.fit(X_train, y_train)
+    train_pred = dt.predict(X_train)
+    false_positive_rate, true_positive_rate, thresholds =    roc_curve(y_train, train_pred)
+    roc_auc = auc(false_positive_rate, true_positive_rate)
+    train_results.append(roc_auc)
+    y_pred = dt.predict(X_test)
+    false_positive_rate, true_positive_rate, thresholds = roc_curve(y_test, y_pred)
+    roc_auc = auc(false_positive_rate, true_positive_rate)
+    test_results.append(roc_auc)
+from matplotlib.legend_handler import HandlerLine2D
+line1,= plt.plot(min_samples_split_values, train_results, 'b', label='Train AUC')
+line2,= plt.plot(min_samples_split_values, test_results, 'r', label='Test AUC')
+plt.legend(handler_map={line1: HandlerLine2D(numpoints=2)})
+plt.ylabel('AUC score')
+plt.xlabel('min samples split')
+plt.show()
+
+#tune min_samples_leafs
+min_samples_leafs = np.linspace(0.1,0.5, 5, endpoint=True)
+train_results = []
+test_results = []
+for min_samples_leaf in min_samples_leafs:
+    dt = DTC(min_samples_leaf=min_samples_leaf,max_depth=4,criterion='gini',min_samples_split=10)
+    dt.fit(X_train, y_train)
+    train_pred = dt.predict(X_train)
+    false_positive_rate, true_positive_rate, thresholds = roc_curve(y_train, train_pred)
+    roc_auc = auc(false_positive_rate, true_positive_rate)
+    train_results.append(roc_auc)
+    y_pred = dt.predict(X_test)
+    false_positive_rate, true_positive_rate, thresholds = roc_curve(y_test, y_pred)
+    roc_auc = auc(false_positive_rate, true_positive_rate)
+    test_results.append(roc_auc)
+from matplotlib.legend_handler import HandlerLine2D
+line1, = plt.plot(min_samples_leafs,train_results, 'b', label='Train AUC')
+line2, = plt.plot(min_samples_leafs,test_results, 'r', label='Test AUC')
+plt.legend(handler_map={line1: HandlerLine2D(numpoints=2)})
+plt.ylabel('AUC score')
+plt.xlabel('min samples leaf')
+plt.show() 
+
+#tune features
+max_features = list(range(1,data1.shape[1]))
+train_results = []
+test_results = []
+for max_feature in max_features:
+    dt = DTC(max_features=max_feature,max_depth=4,criterion='gini',min_samples_split=10)
+    dt.fit(X_train, y_train)
+    train_pred = dt.predict(X_train)
+    false_positive_rate, true_positive_rate, thresholds = roc_curve(y_train, train_pred)
+    roc_auc = auc(false_positive_rate, true_positive_rate)
+    train_results.append(roc_auc)
+    y_pred = dt.predict(X_test)
+    false_positive_rate, true_positive_rate, thresholds = roc_curve(y_test, y_pred)
+    roc_auc = auc(false_positive_rate, true_positive_rate)
+    test_results.append(roc_auc)
+    
+from matplotlib.legend_handler import HandlerLine2D
+
+line1, = plt.plot(max_features, train_results, 'b', label='Train AUC')
+line2, = plt.plot(max_features, test_results, 'r', label='Test AUC')
+plt.legend(handler_map={line1: HandlerLine2D(numpoints=2)})
+plt.ylabel('AUC score')
+plt.xlabel('max features')
+plt.show()
+
+#tune spliter
+import time
+t = time.time()
+clf = DTC(max_depth = 4, splitter = 'best')
+clf.fit(X_train,y_train)
+print('Best Split running time...',time.time() - t)
+print('Best Split accuracy...',clf.score(X_test,y_test))
+
+t = time.time()
+clf = DTC(max_depth = 4, splitter = 'random')
+clf.fit(X_train,y_train)
+print('Random Split running time...',time.time() - t)
+print('Random Split accuracy...',clf.score(X_test,y_test))
+
+#grid search 
+from sklearn.model_selection import GridSearchCV
+
+# 参数设置
+params = {'max_leaf_nodes':[10,20,30],
+          'max_depth':[3,4,5]}
+
+gt1 = DTC(random_state=0, class_weight='balanced')
+
+clf1 = GridSearchCV(gt1, param_grid=params, cv=10)
+clf1.fit(X_train,y_train)
+classifier1 = DTC(**clf1.best_params_) # 根据以上绘图结果选择一个合理参数值
+classifier1.fit(X_train, y_train) # 训练模型
+y_pred1 = classifier1.predict(X_test) # 预测测试集结果
+
+fpr1, tpr1, thresholds1 = roc_curve(y_test, y_pred1)
+roc_auc1 = auc(fpr1, tpr1)
+roc_auc1
